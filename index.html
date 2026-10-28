@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A letter to Santa: HTML-in-Canvas demo</title>
+  <!-- CodePen: paste everything inside <style> into the CSS panel. -->
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&display=swap");
+
+    :root {
+      color-scheme: dark;
+      font-family: system-ui, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      gap: 1rem;
+      padding: 1rem;
+      box-sizing: border-box;
+      background: #0b1026;
+      color: #e8ecff;
+    }
+
+    #scene {
+      display: block;
+      width: min(100%, 760px);
+      height: 600px;
+      border-radius: 16px;
+    }
+
+    /* The letter itself is plain, semantic HTML. */
+    #letter {
+      color-scheme: light;
+      box-sizing: border-box; /* drawElementImage() draws the border box */
+      width: 380px;
+      padding: 28px 34px 24px;
+      color: #23264d;
+      font: 500 24px/32px "Caveat", cursive;
+      background:
+        repeating-linear-gradient(transparent 0 31px, #cfdcec 31px 32px) 0 76px / 100% calc(100% - 76px) no-repeat,
+        #fffaf0;
+      border-left: 3px double #f2a7a7;
+    }
+
+    #letter h1 {
+      margin: 0 0 12px;
+      font-size: 40px;
+      line-height: 44px;
+      font-weight: 700;
+    }
+
+    #letter fieldset {
+      margin: 0 0 8px;
+      padding: 0;
+      border: 0;
+    }
+
+    #letter legend {
+      padding: 0;
+    }
+
+    #letter label {
+      display: block;
+    }
+
+    #letter .choice {
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      margin-right: 16px;
+    }
+
+    #letter input[type="text"] {
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0 0 8px;
+      padding: 0 4px;
+      border: 0;
+      border-bottom: 2px dashed #8a93c9;
+      background: transparent;
+      color: #b0172a;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    #letter input[type="text"]:focus-visible {
+      outline: 2px solid #b0172a;
+      outline-offset: 2px;
+    }
+
+    #letter input[type="radio"] {
+      accent-color: #b0172a;
+      width: 18px;
+      height: 18px;
+    }
+
+    #letter button {
+      margin-top: 8px;
+      padding: 6px 16px;
+      border: 0;
+      border-radius: 999px;
+      background: #b0172a;
+      color: #fff;
+      font: 700 22px/28px "Caveat", cursive;
+      cursor: pointer;
+    }
+
+    #letter button:focus-visible {
+      outline: 3px solid #23264d;
+      outline-offset: 3px;
+    }
+
+    #letter .status {
+      min-height: 32px;
+      margin: 8px 0 0;
+      color: #1a7a3c;
+    }
+
+    .note {
+      max-width: 60ch;
+      margin: 0;
+      font-size: 14px;
+      text-align: center;
+      color: #b8c0ee;
+    }
+  </style>
+</head>
+<body>
+  <!-- CodePen: paste the markup below into the HTML panel. -->
+  <canvas id="scene" content="drawable">
+    <form id="letter" drawable>
+      <h1>Dear Santa,</h1>
+      <fieldset>
+        <legend>This year I have been</legend>
+        <label class="choice"><input type="radio" name="behavior" value="nice" checked> nice</label>
+        <label class="choice"><input type="radio" name="behavior" value="naughty"> a tiny bit naughty</label>
+      </fieldset>
+      <label for="wish">For Christmas, I would like</label>
+      <input type="text" id="wish" name="wish" value="a puppy" required>
+      <label for="name">Love,</label>
+      <input type="text" id="name" name="name" autocomplete="given-name" placeholder="your name" required>
+      <button type="submit">Send to the North Pole ✉️</button>
+      <p class="status" role="status"></p>
+    </form>
+  </canvas>
+  <p class="note" id="note">
+    A real <code>&lt;form&gt;</code>, drawn into a 2D canvas with HTML-in-Canvas. Try
+    <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> for “puppy”, select the text, or Tab through it with a
+    screen reader. The paper holds still while you write.
+  </p>
+
+  <!-- CodePen: paste everything inside <script> into the JS panel. -->
+  <script>
+    const canvas = document.getElementById("scene");
+    const letter = document.getElementById("letter");
+    const statusMessage = letter.querySelector(".status");
+    const note = document.getElementById("note");
+
+    // The form works the same with or without HTML-in-Canvas.
+    letter.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const data = new FormData(letter);
+      statusMessage.textContent = `✨ Sent! The elves are already looking for ${data.get("wish")}.`;
+    });
+
+    // Feature detection. getElementImageDefaultSize() only exists in the
+    // shipped API (Chrome 157+), not in the older origin trial version.
+    function supportsHtmlInCanvas() {
+      const test = document.createElement("canvas");
+      test.setAttribute("content", "drawable");
+      return test.content === "drawable" &&
+        "getElementImageDefaultSize" in HTMLCanvasElement.prototype;
+    }
+
+    if (supportsHtmlInCanvas()) {
+      startScene();
+    } else {
+      // Fallback: show the plain form outside the canvas.
+      canvas.after(letter);
+      canvas.remove();
+      note.textContent =
+        "Your browser doesn't support HTML-in-Canvas yet, so here's the plain form. " +
+        "Open this demo in Chrome 157+ to see it wave in the snow.";
+    }
+
+    function startScene() {
+      const ctx = canvas.getContext("2d");
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+      // Keep the canvas grid in sync with device pixels ("Sizing and units").
+      let scaleX = 1; // canvas grid pixels per CSS pixel
+      let scaleY = 1;
+      const observer = new ResizeObserver(([entry]) => {
+        const { width, height } = entry.contentRect;
+        if (!width || !height) return;
+        const box = entry.devicePixelContentBoxSize?.[0];
+        canvas.width = box ? box.inlineSize : Math.round(width * devicePixelRatio);
+        canvas.height = box ? box.blockSize : Math.round(height * devicePixelRatio);
+        scaleX = canvas.width / width;
+        scaleY = canvas.height / height;
+        canvas.requestPaint();
+      });
+      try {
+        observer.observe(canvas, { box: "device-pixel-content-box" });
+      } catch {
+        observer.observe(canvas);
+      }
+
+      // Snowflakes in normalized coordinates (0–1), radius in CSS pixels.
+      const flakes = Array.from({ length: 140 }, () => ({
+        x: Math.random(),
+        y: Math.random(),
+        r: 0.6 + Math.random() * 2.4,
+        speed: 0.03 + Math.random() * 0.06,
+        sway: Math.random() * Math.PI * 2,
+        front: Math.random() < 0.25, // some flakes fall in front of the letter
+      }));
+
+      const MAX_AMPLITUDE = 7; // CSS pixels: small, so hit testing stays close
+      const ROWS = 48; // the letter is drawn as horizontal strips
+      let amplitude = reduceMotion.matches ? 0 : MAX_AMPLITUDE;
+      let last = performance.now();
+
+      canvas.onpaint = () => {
+        const now = performance.now();
+        const dt = reduceMotion.matches ? 0 : Math.min((now - last) / 1000, 0.1);
+        last = now;
+        const t = now / 1000;
+
+        // The paper settles when you reach for it or start writing.
+        const calm = reduceMotion.matches || letter.matches(":hover, :focus-within");
+        const target = calm ? 0 : MAX_AMPLITUDE;
+        amplitude += (target - amplitude) * Math.min(1, dt * 4);
+        if (calm && amplitude < 0.05) amplitude = 0;
+
+        ctx.reset();
+        drawSky();
+        drawSnow(dt, t, false);
+
+        // Center the letter. offsetWidth/offsetHeight are CSS pixels.
+        const cssWidth = letter.offsetWidth;
+        const cssHeight = letter.offsetHeight;
+        const width = cssWidth * scaleX;
+        const height = cssHeight * scaleY;
+        const x = (canvas.width - width) / 2;
+        const y = (canvas.height - height) / 2;
+
+        // Soft shadow under the paper.
+        ctx.save();
+        ctx.filter = `blur(${14 * scaleX}px)`;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.45)";
+        ctx.fillRect(x + 10 * scaleX, y + 16 * scaleY, width, height);
+        ctx.restore();
+
+        // Draw the letter as strips, each shifted along a sine wave.
+        // Source rectangles are in CSS pixels, destinations in canvas pixels.
+        const rowCss = cssHeight / ROWS;
+        for (let i = 0; i < ROWS; i++) {
+          const sy = i * rowCss;
+          const phase = t * 2.2 - i * 0.22;
+          const offset = amplitude * Math.sin(phase) * scaleX;
+          const dy = y + sy * scaleY;
+          const dh = rowCss * scaleY + 1; // +1 avoids hairline seams
+          ctx.drawElementImage(
+            letter,
+            0, sy, cssWidth, rowCss,
+            x + offset, dy, width, dh,
+            { preserveElementGeometry: true },
+          );
+          // Light and shadow on the folds of the paper.
+          const shade = Math.cos(phase) * (amplitude / MAX_AMPLITUDE) * 0.08;
+          if (shade !== 0) {
+            ctx.fillStyle = shade > 0 ? `rgba(255,255,255,${shade})` : `rgba(0,0,40,${-shade})`;
+            ctx.fillRect(x + offset, dy, width, dh);
+          }
+        }
+
+        // Hit testing and accessibility use the letter's resting position.
+        // The wave is only a few pixels, and it stops when you reach for the letter.
+        // canvasTransform is in CSS pixels.
+        canvas.updateElementGeometry(letter, {
+          canvasTransform: new DOMMatrix().translate(x / scaleX, y / scaleY),
+        });
+
+        drawSnow(dt, t, true);
+
+        // Keep animating unless the user prefers reduced motion.
+        if (!reduceMotion.matches || amplitude > 0) canvas.requestPaint();
+      };
+
+      function drawSky() {
+        const sky = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        sky.addColorStop(0, "#0b1026");
+        sky.addColorStop(1, "#28356f");
+        ctx.fillStyle = sky;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // A snowy hill.
+        ctx.fillStyle = "#e9efff";
+        ctx.beginPath();
+        ctx.ellipse(canvas.width / 2, canvas.height * 1.15, canvas.width * 0.8, canvas.height * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawSnow(dt, t, front) {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+        for (const flake of flakes) {
+          if (flake.front !== front) continue;
+          flake.y += flake.speed * dt;
+          if (flake.y > 1.02) {
+            flake.y = -0.02;
+            flake.x = Math.random();
+          }
+          const px = (flake.x + Math.sin(t * 0.8 + flake.sway) * 0.01) * canvas.width;
+          const py = flake.y * canvas.height;
+          ctx.beginPath();
+          ctx.arc(px, py, flake.r * scaleX, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      reduceMotion.addEventListener("change", () => canvas.requestPaint());
+      letter.addEventListener("focusin", () => canvas.requestPaint());
+      letter.addEventListener("pointerenter", () => canvas.requestPaint());
+      canvas.requestPaint();
+    }
+  </script>
+</body>
+</html>
