@@ -119,6 +119,24 @@
       color: #1a7a3c;
     }
 
+    #fallback {
+      width: min(100%, 420px);
+      color: #e8ecff;
+    }
+
+    #fallback summary {
+      cursor: pointer;
+      font-weight: 600;
+      padding: 8px 0;
+    }
+
+    #fallback video {
+      display: block;
+      width: 100%;
+      margin: 8px 0 12px;
+      border-radius: 8px;
+    }
+
     .note {
       max-width: 60ch;
       margin: 0;
@@ -145,6 +163,11 @@
       <p class="status" role="status"></p>
     </form>
   </canvas>
+  <!-- Fallback for browsers without HTML-in-Canvas. Hidden when the API is supported. -->
+  <details id="fallback" hidden>
+    <summary>No HTML-in-Canvas support in your browser? Open the letter</summary>
+    <p>This demo needs Chrome 157 or later. Here's the plain letter instead: same form, no snow.</p>
+  </details>
   <p class="note" id="note">
     A real <code>&lt;form&gt;</code>, drawn into a 2D canvas with HTML-in-Canvas. Try
     <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>F</kbd> for “puppy”, select the text, or Tab through it with a
@@ -176,12 +199,26 @@
     if (supportsHtmlInCanvas()) {
       startScene();
     } else {
-      // Fallback: show the plain form outside the canvas.
-      canvas.after(letter);
+      // Fallback: move the plain form into the <details> element.
+      // (Yes, a <details>. This is HTMHell.)
+      const fallback = document.getElementById("fallback");
+      fallback.append(letter);
+      fallback.hidden = false;
       canvas.remove();
-      note.textContent =
-        "Your browser doesn't support HTML-in-Canvas yet, so here's the plain form. " +
-        "Open this demo in Chrome 157+ to see it wave in the snow.";
+      note.hidden = true;
+      // If a screen recording of the effect sits next to this page, show it too.
+      fetch("letter-to-santa.mp4", { method: "HEAD" })
+        .then((response) => {
+          if (!response.ok) return;
+          const video = document.createElement("video");
+          video.src = "letter-to-santa.mp4";
+          video.controls = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.loop = true;
+          letter.before(video);
+        })
+        .catch(() => {});
     }
 
     function startScene() {
